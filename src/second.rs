@@ -1,4 +1,3 @@
-use std::mem;
 
 //https://rust-unofficial.github.io/too-many-lists/
 //[Elem A, ptr] -> (Elem B, ptr) -> (Empty, *junk*)
@@ -232,25 +231,30 @@ How do we rewrite our List? Well, we could do something like:
 
 
 
+
+
+
+
+
+
 pub struct List<T> {
     head: Link<T>,
 }
-
 type Link<T> = Option<Box<Node<T>>>;
-
 struct Node<T> {
     elem: T,
     next: Link<T>,
 }
-
 impl<T> List<T> {
     pub fn new() -> Self {
         List { head: None }
     }
 
+
+
     pub fn push(&mut self, elem: T) {
         let new_node = Box::new(Node {
-            elem: elem,
+            elem,
             next: self.head.take(),
         });
 
@@ -263,8 +267,64 @@ impl<T> List<T> {
             node.elem
         })
     }
-}
 
+    pub fn peek(&self) -> Option<&T> {
+        //map() takes self by value (it doesnt care about what type of parameter
+        // i have -mut ref , ref, value-), so we have to use
+        //as_ref()
+        //
+        //El método as_ref en Rust es muy útil cuando se trabaja con tipos como Option y Result
+        // necesitas convertir una referencia a una opción (&Option<T>) en una opción que contiene
+        // una referencia (Option<&T>). Esto es especialmente importante cuando quieres acceder al
+        // contenido del Option sin mover o consumir el Option original.
+
+
+        // Converts from &Option<T> to Option<&T>
+
+        //Usar as_ref te permite trabajar con una referencia al contenido del Option en lugar de moverlo.
+
+        //pub fn map<U, F>(self (SE LO LLEVA), f: F)
+        self.head.as_ref().map(|node| {
+            &node.elem
+        })
+    }
+
+    pub fn peek_mut(&mut self) -> Option<&mut T> {
+        //lo que devuelvo es el head, tengo que habilitarlo como muy
+        /*
+            con as_mut() devuelvo una referencia a un option con referencia mutable
+            el self que consume/mueve seria el head??o el self normal idk, estariamos
+             moviendo el ownership del option, lo que no se puede porque tenemos como
+              parametro una referencia
+        */
+        self.head.as_mut().map(|node| {
+            &mut node.elem
+        })
+
+
+
+    }
+
+
+    pub fn into_iter(self) -> IntoIter<T> {--
+        IntoIter(self)
+    }
+
+    pub fn iter(&self) -> Iter<T> {
+        // head = Option<Box<Node<T>>>;
+        // Converts from &Option<T>)to Option<&T>
+        //In this case it converts from Option<&Box<Node<T>>> to
+        // Option<Box<&Node<T>>>;
+        //to Option<&>
+        Iter { next: self.head.as_deref().map(|node| &*node) }
+    }
+
+    pub fn iter_mut(&self) -> IterMut<'_, T> {
+        IterMut { next: self.head.as_deref_mut() }
+    }
+
+
+}
 impl<T> Drop for List<T> {
     fn drop(&mut self) {
         let mut cur_link = self.head.take();
@@ -278,9 +338,160 @@ impl<T> Drop for List<T> {
 
 
 
+//Collections are iterated in Rust using the Iterator trait
+/*
+pub trait Iterator {
+    type Item;
+    fn next(&mut self) -> Option<Self::Item>;
+}
+
+Type Item.  is declaring that every implementation of Iterator has an associated type called Item.
+ In this case, this is the type that it can spit out when you call next.
+*/
+
+
+
+
+//Iter is generic over *some* lifetime, it doesn't care
+//definition with a lifetime and a type
+//the lifetime indicates how much time the references inside Iter
+// are valid, to set this lifetime to a ref, mark it with ´a
+
+/*
+So what does fn foo<'a>(&'a A) -> &'a B mean? In practical terms, all it means is
+ that the input must live at least as long as the output. So if you keep the output
+  around for a long time, this will expand the region that the input must be valid for.
+   Once you stop using the output, the compiler will know it's ok for the input to become
+    invalid too.*/
+pub struct Iter<'a, T> {
+    next: Option<&'a Node<T>>,
+}
+impl<'a, T> Iterator for Iter<'a, T> {
+    // Need it here too, this is a type declaration
+    type Item = &'a T;
+
+    // None of this needs to change, handled by the above.
+    // Self continues to be incredibly hype and amazing
+    fn next(&mut self) -> Option<Self::Item> {
+        //si self.next es Some, aplica una funcion con el como parametro
+        self.next.map(|node| {
+
+            // Option<Box<Node<T>>>`= node.next.map(|node| &node);
+            // Lo que daría error, pero sacando el valor de la ref
+            //que tenemos a node con "*" y anteponiendole el ampersand
+            //podemos obtener esa referencia a &Node<T> que necesitamos
+
+            /*
+             El node que nos proporciona este next  (tipo  Node)
+             nos devuelve Option<Box<Node<T>>> pero lo que nosotros
+             queremos es un Node<T>
+            */
+
+            // node -> Option<&'a Node<T>>
+            // node.next = Option<Box<Node<T>>>;
+            // node.next.as_ref = &Box<Node<T>>
+            // node.next.as_deref = &Node<T>
+
+            /*
+            INTERESTING
+            I can do the same as "as_deref()" using as_ref (adding an indirection layer)
+            an then deref it using value operator "*" twice (not recommended)
+            */
+
+            /*
+            pub fn map<U, F>(self, f: F) -> Option<U>
+                where F: FnOnce(T) -> U, (F es funcion o closure fn (T) -> U
+            */
+            self.next = node.next.as_deref();
+            &node.elem
+        })
+    }
+}
+
+
+// Tuple structs are an alternative form of struct,
+// useful for trivial wrappers around other types.
+//this iterator traverses the list transferring the ownership
+pub struct IntoIter<T>(List<T>);
+impl<T> Iterator for IntoIter<T> {
+    // Define que el tipo de los elementos que este iterador devolverá es T
+    type Item = T;
+    //Este método debe devolver Option<Self::Item>, lo que en este caso es Option<T>.
+    fn next(&mut self) -> Option<Self::Item> {
+        // access fields of a tuple struct numerically
+        self.0.pop()
+    }
+}
+
+pub struct IterMut<'a, T> {
+    next: Option<&'a mut Node<T>>,
+}
+impl<'a, T> Iterator for IterMut<'a, T> {
+    type Item = &'a mut T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.next.map(|node| {
+            self.next = node.next.as_deref_mut();
+            &mut node.elem
+        })
+    }
+}
+
+
+
+
 mod test {
     use crate::second::List;
+    #[test]
+    fn iter() {
+        let mut list = List::new();
+        list.push(1); list.push(2); list.push(3);
 
+        let mut iter = list.iter();
+        assert_eq!(iter.next(), Some(&3));
+        assert_eq!(iter.next(), Some(&2));
+        assert_eq!(iter.next(), Some(&1));
+    }
+    #[test]
+    fn into_iter() {
+        let mut list = List::new();
+        list.push(1); list.push(2); list.push(3);
+
+        let mut iter = list.into_iter();
+        assert_eq!(iter.next(), Some(3));
+        assert_eq!(iter.next(), Some(2));
+        assert_eq!(iter.next(), Some(1));
+        assert_eq!(iter.next(), None);
+    }
+
+    #[test]
+    fn peek_mut() {
+        let mut list = List::new();
+        assert_eq!(list.peek(), None);
+        assert_eq!(list.peek_mut(), None);
+        list.push(1); list.push(2); list.push(3);
+
+        assert_eq!(list.peek(), Some(&3));
+        assert_eq!(list.peek_mut(), Some(&mut 3));
+
+        list.peek_mut().map(|value| {
+            //valor de la referencia
+            *value = 42
+        });
+
+        assert_eq!(list.peek(), Some(&42));
+        assert_eq!(list.pop(), Some(42));
+    }
+    #[test]
+    fn peek() {
+        let mut list = List::new();
+        assert_eq!(list.peek(), None);
+        assert_eq!(list.peek_mut(), None);
+        list.push(1); list.push(2); list.push(3);
+
+        assert_eq!(list.peek(), Some(&3));
+        assert_eq!(list.peek_mut(), Some(&mut 3));
+    }
     #[test]
     fn basics() {
         mod test {
@@ -318,3 +529,43 @@ mod test {
 
     }
 }
+
+
+
+/*
+pub trait Iterator {
+    type Item;
+    fn next(&mut self) -> Option<Self::Item>;
+}
+
+
+type Item. This is declaring that every implementation of Iterator has an associated type
+called Item. In this case, this is the type that it can spit out when you call next.
+*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
