@@ -306,7 +306,7 @@ impl<T> List<T> {
     }
 
 
-    pub fn into_iter(self) -> IntoIter<T> {--
+    pub fn into_iter(self) -> IntoIter<T> {
         IntoIter(self)
     }
 
@@ -319,7 +319,7 @@ impl<T> List<T> {
         Iter { next: self.head.as_deref().map(|node| &*node) }
     }
 
-    pub fn iter_mut(&self) -> IterMut<'_, T> {
+    pub fn iter_mut(&mut self) -> IterMut<'_, T> {
         IterMut { next: self.head.as_deref_mut() }
     }
 
@@ -374,6 +374,7 @@ impl<'a, T> Iterator for Iter<'a, T> {
     // Self continues to be incredibly hype and amazing
     fn next(&mut self) -> Option<Self::Item> {
         //si self.next es Some, aplica una funcion con el como parametro
+        //Aqui como next es Option<&Node<T>>, es copy asi que el map funciona
         self.next.map(|node| {
 
             // Option<Box<Node<T>>>`= node.next.map(|node| &node);
@@ -430,7 +431,11 @@ impl<'a, T> Iterator for IterMut<'a, T> {
     type Item = &'a mut T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.next.map(|node| {
+        //Aqui como next es Option<&'a mut Node<T>>, no es copy
+        //y no funciona, si ponemos el take nos da un Option<...TODO
+        //self en el take es next, self es Option<&'a mut Node<T>>
+        //tiene &mut self de parametro ....>
+        self.next.take().map(|node| {
             self.next = node.next.as_deref_mut();
             &mut node.elem
         })
@@ -442,6 +447,36 @@ impl<'a, T> Iterator for IterMut<'a, T> {
 
 mod test {
     use crate::second::List;
+
+    #[test]
+    fn iter_mut() {
+        let mut list = List::new();
+        list.push(1); list.push(2); list.push(3);
+
+        let mut iter = list.iter_mut();
+        let nextt = iter.next();
+        assert_eq!(nextt, Some(&mut 3));
+
+        if let Some(val) = nextt{
+            println!("Valor antes: {}",*val);
+            *val = 69;
+            println!("Valor despues: {}",*val);
+        }
+        // -------------------------------
+
+        let mut iter2 = list.iter_mut();
+        let nextt = iter2.next();
+        assert_eq!(nextt, Some(&mut 69));
+
+        if let Some(val) = nextt{
+            println!("Valor antes: {}",*val);
+            *val = 3;
+            println!("Valor despues: {}",*val);
+        }
+
+    }
+
+
     #[test]
     fn iter() {
         let mut list = List::new();
