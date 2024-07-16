@@ -1,9 +1,6 @@
+use std::mem;
 
-#![allow(unused)]
-fn main() {
-    use std::mem;
-
-    pub struct List {
+pub struct List {
         head: Link,
     }
 
@@ -85,4 +82,4 @@ fn main() {
             assert_eq!(list.pop(), None);
         }
     }
-}
+
